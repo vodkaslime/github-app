@@ -20,4 +20,4 @@ jobs:
             token: ${{ steps.get_workflow_token.outputs.token }}
             repository: vodkaslime/test-repo
 
-      - run: git clone "https://user:${{ steps.get_workflow_token.outputs.token }}github.com/vodkaslime/test-repo.git"
+      - run: git clone "https://user:${{ steps.get_workflow_token.outputs.token }}@github.com/vodkaslime/test-repo.git"
