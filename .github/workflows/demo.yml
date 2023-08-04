@@ -1,0 +1,15 @@
+name: Use Github App
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  checkout-other-repo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+            token: ${{ github.token }}
+            repository: vodkaslime/test-repo
+									
