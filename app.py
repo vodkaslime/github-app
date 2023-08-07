@@ -1,4 +1,6 @@
 import os
+import hmac
+import hashlib
 
 from flask import Flask, request
 from github import Github, GithubIntegration
@@ -17,7 +19,6 @@ git_integration = GithubIntegration(
     app_id,
     app_key,
 )
-
 
 def count_files(dir):
     files = lines = 0
@@ -39,10 +40,29 @@ def count_files(dir):
                 stack.append(file_path)
     return files, lines
 
+def validate_signature(signature_header, data):
+    sha_name, github_signature = signature_header.split('=')
+    if sha_name != 'sha1':
+        raise Exception("invalid signature header")
+    local_signature = hmac.new("somekey2".encode('utf-8'), msg=data, digestmod=hashlib.sha1)
+
+    if not hmac.compare_digest(local_signature.hexdigest(), github_signature):
+        raise Exception("invalid signature")
+
 @app.route("/", methods=['POST'])
 def bot():
     # Get the event payload
     payload = request.json
+
+    headers = request.headers
+    signature_header = headers.get('X-Hub-Signature')
+    data = request.get_data()
+
+    try:
+        validate_signature(signature_header, data)
+    except Exception as error:
+        print(error)
+        return "invalid signature"
 
     # Check if the event is a GitHub PR creation event
     if (not all(k in payload.keys() for k in ['action', 'pull_request']) and payload['action'] == 'opened'):
