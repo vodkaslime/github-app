@@ -44,7 +44,7 @@ def validate_signature(signature_header, data):
     sha_name, github_signature = signature_header.split('=')
     if sha_name != 'sha1':
         raise Exception("invalid signature header")
-    local_signature = hmac.new("somekey2".encode('utf-8'), msg=data, digestmod=hashlib.sha1)
+    local_signature = hmac.new("somekey".encode('utf-8'), msg=data, digestmod=hashlib.sha1)
 
     if not hmac.compare_digest(local_signature.hexdigest(), github_signature):
         raise Exception("invalid signature")
@@ -96,4 +96,4 @@ def bot():
 
 
 if __name__ == "__main__":
-    app.run(debug=True, port=3000)
+    app.run(host='0.0.0.0', port=3000)
