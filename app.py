@@ -1,12 +1,17 @@
 import os
 import hmac
 import hashlib
+import subprocess
+import re
 
 from flask import Flask, request
 from github import Github, GithubIntegration
+import toml
 
 app = Flask(__name__)
 app_id = '371364'
+
+
 # Read the bot certificate
 with open(
         os.path.normpath(os.path.expanduser('private-key.pem')),
@@ -20,25 +25,59 @@ git_integration = GithubIntegration(
     app_key,
 )
 
-def count_files(dir):
-    files = lines = 0
-
-    # dfs
-    stack = [dir]
+def make_structure(dir):
+    stack = [(dir, "root", 0)]
+    res = ""
     while stack:
-        path = stack.pop()
-        for file in os.listdir(path):
-            file_path = os.path.join(path, file)
-            if file_path == os.path.join(dir, ".git"):
-                continue
-            if os.path.isfile(file_path):
-                files += 1
-                print(file_path)
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    lines += len(f.readlines())
-            elif os.path.isdir(file_path):
-                stack.append(file_path)
-    return files, lines
+        curr, print_name, ind = stack.pop()
+        res += ' ' * ind + f"- {print_name}\n"
+        new_ind = ind + 2
+        if os.path.isdir(curr):
+            for item in os.listdir(curr)[::-1]:
+                item_path = os.path.join(curr, item)
+                stack.append((item_path, item, new_ind))
+    return res
+
+def index(url):
+
+    # make config.toml file
+    toml_config = {
+        "repositories":[
+            {
+                "git_url": url,
+            }
+        ],
+        "experimental": {
+            "enable_prompt_rewrite": False,
+        }
+    }
+
+    toml_config_str = toml.dumps(toml_config)
+
+    root_path = os.path.expanduser("~/.tabby")
+    file_path = os.path.join(root_path, "config.toml")
+    with open(file_path, 'w') as file:
+        file.write(toml_config_str)
+
+    # start indexing
+    cmd = "docker run -it -v $HOME/.tabby:/data tabbyml/tabby scheduler --now"
+    dev = True
+    if dev:
+        cmd = "docker run -it -e HTTP_PROXY=http://localhost:7890 -e HTTPS_PROXY=http://localhost:7890 --network host -v $HOME/.tabby:/data tabbyml/tabby scheduler --now"
+    
+    p = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    if p.stderr:
+        print(p.stderr)
+        raise Exception("error indexing")
+    
+    # print file structure
+    arr = re.split(r'[:/]', url)
+    dir = "_".join([s for s in arr if s])
+    dir_path = os.path.join(root_path, "repositories", dir)
+
+    file_structure = make_structure(dir_path)
+
+    return file_structure
 
 def validate_signature(signature_header, data):
     sha_name, github_signature = signature_header.split('=')
@@ -75,13 +114,8 @@ def bot():
 
     print(token)
     url = f"https://oauth2:{token}@github.com/{owner}/{repo_name}"
-    dir = f"/tmp/{owner}/{repo_name}"
 
-    if not os.path.exists(dir):
-        os.system(f"git clone {url} {dir}")
-
-    files, lines = count_files(dir)
-    comment_msg = f"the repo has {files} files and {lines} lines of code"
+    comment_msg = index(url)
 
     git_connection = Github(
         login_or_token=token
