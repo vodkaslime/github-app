@@ -1,4 +1,4 @@
-# app-count-files
+# Github App
 
 ## Setup
 To install smee nodejs dependencies:
