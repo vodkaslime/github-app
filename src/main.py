@@ -3,38 +3,22 @@ This module is the FastAPI main app as backend of Github App,
 which handles indexing jobs per repository pull requests.
 '''
 
-import os
 from typing import Annotated
 
-from github import Github, GithubIntegration
-from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request, Header
 
+from src.indexing import IndexingTask
 from src.model import WebhookRequest
-from src.indexing import index
+from src.task_manager import TaskManager
 from src.validation import validate_signature
 
-# Load environment variables in .env
-load_dotenv()
-
 app = FastAPI()
-app_id = os.getenv("APP_ID")
-private_key_path = os.getenv("PRIVATE_KEY_PATH")
 
 pull_request_actions = ["opened", "closed", "reopened"]
 
-# Read the bot certificate
-with open(
-    os.path.normpath(os.path.expanduser(private_key_path)),
-    'r', encoding='utf-8'
-) as cert_file:
-    app_key = cert_file.read()
-
-# Create an GitHub integration instance
-git_integration = GithubIntegration(
-    app_id,
-    app_key,
-)
+# Create task manager
+task_manager = TaskManager(100)
+task_manager.start_consumer()
 
 @app.post("/")
 async def bot(
@@ -61,21 +45,14 @@ async def bot(
     if not request.repository:
         raise HTTPException(status_code=403, detail="invalid request: repository needed")
 
-    owner = request.repository.owner.login
-    repo_name = request.repository.name
+    # Submit the indexing job
+    task_manager.submit(IndexingTask(request))
 
-    token = git_integration.get_access_token(
-        git_integration.get_repo_installation(owner, repo_name).id
-    ).token
-    url = f"https://oauth2:{token}@github.com/{owner}/{repo_name}"
-
-    # Run the actual indexing job
-    comment_msg = index(url)
-
-    git_connection = Github(login_or_token=token)
-    repo = git_connection.get_repo(f"{owner}/{repo_name}")
-    issue = repo.get_issue(number=request.pull_request.number)
-
-    # Create a comment with the random meme
-    issue.create_comment(comment_msg)
     return "ok"
+
+@app.on_event("shutdown")
+def shutdown_event():
+    '''
+    Handle clean ups when shutting down app.
+    '''
+    task_manager.submit(None)
