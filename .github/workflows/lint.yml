@@ -25,6 +25,5 @@ jobs:
             pip install -r requirements.txt
 
         - name: Run linter
-          uses: ricardochaves/python-lint@master
-          with:
-            python-root-list: "src"
+          run: |
+            pylint src
