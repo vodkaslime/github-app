@@ -23,10 +23,10 @@ class ValidationError(Exception):
 def validate_signature(signature_header: str, data: bytes):
     '''
     Given params:
-    
+
     signature_header: str,
     data: bytes,
-    
+
     raise ValidationError if validation fails.
     Otherwise return with nothing.
     '''
