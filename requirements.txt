@@ -1,3 +1,5 @@
 flask
 pygithub
 toml
+uvicorn
+python-dotenv

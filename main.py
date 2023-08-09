@@ -7,14 +7,19 @@ import re
 from flask import Flask, request
 from github import Github, GithubIntegration
 import toml
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = Flask(__name__)
-app_id = '371364'
+app_id = os.getenv("APP_ID")
+webhook_secret = os.getenv("WEBHOOK_SECRET")
+private_key_path = os.getenv("PRIVATE_KEY_PATH")
 
 
 # Read the bot certificate
 with open(
-        os.path.normpath(os.path.expanduser('private-key.pem')),
+        os.path.normpath(os.path.expanduser(private_key_path)),
         'r'
 ) as cert_file:
     app_key = cert_file.read()
@@ -83,7 +88,7 @@ def validate_signature(signature_header, data):
     sha_name, github_signature = signature_header.split('=')
     if sha_name != 'sha1':
         raise Exception("invalid signature header")
-    local_signature = hmac.new("somekey".encode('utf-8'), msg=data, digestmod=hashlib.sha1)
+    local_signature = hmac.new(webhook_secret.encode('utf-8'), msg=data, digestmod=hashlib.sha1)
 
     if not hmac.compare_digest(local_signature.hexdigest(), github_signature):
         raise Exception("invalid signature")
