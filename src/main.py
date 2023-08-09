@@ -3,24 +3,29 @@ import hmac
 import hashlib
 import subprocess
 import re
+from typing import Annotated
 
-from flask import Flask, request
 from github import Github, GithubIntegration
 import toml
 from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException, Request, Header
 
+from .model import WebhookRequest
+
+# Load environment variables in .env
 load_dotenv()
 
-app = Flask(__name__)
+app = FastAPI()
 app_id = os.getenv("APP_ID")
 webhook_secret = os.getenv("WEBHOOK_SECRET")
 private_key_path = os.getenv("PRIVATE_KEY_PATH")
 
+pull_request_actions = ["opened", "closed", "reopened"]
 
 # Read the bot certificate
 with open(
-        os.path.normpath(os.path.expanduser(private_key_path)),
-        'r'
+    os.path.normpath(os.path.expanduser(private_key_path)),
+    'r'
 ) as cert_file:
     app_key = cert_file.read()
 
@@ -30,7 +35,7 @@ git_integration = GithubIntegration(
     app_key,
 )
 
-def make_structure(dir):
+def make_structure(dir: str):
     stack = [(dir, "root", 0)]
     res = ""
     while stack:
@@ -43,7 +48,7 @@ def make_structure(dir):
                 stack.append((item_path, item, new_ind))
     return res
 
-def index(url):
+def index(url: str):
 
     # make config.toml file
     toml_config = {
@@ -84,50 +89,50 @@ def index(url):
 
     return file_structure
 
-def validate_signature(signature_header, data):
+def validate_signature(signature_header: str, data: bytes):
     sha_name, github_signature = signature_header.split('=')
     if sha_name != 'sha1':
         raise Exception("invalid signature header")
+
     local_signature = hmac.new(webhook_secret.encode('utf-8'), msg=data, digestmod=hashlib.sha1)
 
     if not hmac.compare_digest(local_signature.hexdigest(), github_signature):
         raise Exception("invalid signature")
 
-@app.route("/", methods=['POST'])
-def bot():
+@app.post("/")
+async def bot(
+    request: WebhookRequest,
+    x_hub_signature: Annotated[str | None, Header()],
+    request_raw_data: Request
+):
     # Get the event payload
-    payload = request.json
-
-    headers = request.headers
-    signature_header = headers.get('X-Hub-Signature')
-    data = request.get_data()
+    data = await request_raw_data.body()
 
     try:
-        validate_signature(signature_header, data)
+        validate_signature(x_hub_signature, data)
     except Exception as error:
         print(error)
-        return "invalid signature"
+        raise HTTPException(status_code=403, detail="invalid signature")
 
     # Check if the event is a GitHub PR creation event
-    if (not all(k in payload.keys() for k in ['action', 'pull_request']) and payload['action'] == 'opened'):
-        return "ok"
+    if not request.action or request.action not in pull_request_actions or not request.pull_request:
+        raise HTTPException(status_code=403, detail="request not supported")
 
-    owner = payload['repository']['owner']['login']
-    repo_name = payload['repository']['name']
+    if not request.repository:
+        raise HTTPException(status_code=403, detail="invalid request: repository needed")
+    
+    owner = request.repository.owner.login
+    repo_name = request.repository.name
 
     token = git_integration.get_access_token(git_integration.get_repo_installation(owner, repo_name).id).token
-
-    print(token)
     url = f"https://oauth2:{token}@github.com/{owner}/{repo_name}"
 
+    # Run the actual indexing job
     comment_msg = index(url)
 
-    git_connection = Github(
-        login_or_token=token
-    )
+    git_connection = Github(login_or_token=token)
     repo = git_connection.get_repo(f"{owner}/{repo_name}")
-
-    issue = repo.get_issue(number=payload['pull_request']['number'])
+    issue = repo.get_issue(number=request.pull_request.number)
 
     # Create a comment with the random meme
     issue.create_comment(comment_msg)
