@@ -4,7 +4,6 @@ which handles indexing jobs per repository pull requests.
 '''
 
 from typing import Annotated
-import signal
 
 from fastapi import FastAPI, HTTPException, Request, Header
 
@@ -53,4 +52,7 @@ async def bot(
 
 @app.on_event("shutdown")
 def shutdown_event():
+    '''
+    Handle clean ups when shutting down app.
+    '''
     task_manager.submit(None)

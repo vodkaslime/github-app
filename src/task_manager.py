@@ -14,7 +14,7 @@ class TaskManager():
     '''
     def __init__(self, capacity: int):
         self.message_queue = queue.Queue(maxsize=capacity)
-    
+
     def submit(self, task: IndexingTask):
         '''
         Submits a task to message queue.

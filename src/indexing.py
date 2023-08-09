@@ -112,7 +112,6 @@ class IndexingTask():
         if task.stderr:
             print(task.stderr)
             raise IndexingError("error indexing")
-        return
 
     def run(self):
         '''
