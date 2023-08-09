@@ -1,5 +1,5 @@
-flask
 pygithub
 toml
-uvicorn
+fastapi
+uvicorn[standard]
 python-dotenv
